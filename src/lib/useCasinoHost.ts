@@ -1,81 +1,62 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from "react";
 import {
-  connectGameToHost,
-  observeGameContentSize,
-  type GuestBridgeConnection,
-  type HostApi,
-  type HostSnapshot,
-} from '@chain-protocol/casino-sdk/guest';
-
-type SnapshotListener = (snapshot: HostSnapshot | null) => void;
-
-type HostBridge = {
-  connection: GuestBridgeConnection;
-  listeners: Set<SnapshotListener>;
-  latest: HostSnapshot | null;
-};
-
-let bridge: HostBridge | undefined;
+    connectGameToHost,
+    observeGameContentSize,
+    type GuestApi,
+    type HostApi,
+    type HostSnapshot,
+} from "@chain-protocol/casino-sdk/guest";
 
 /**
- * One connection per page. The host binds its guest proxy to the first
- * handshake, so connecting again on a remount (StrictMode in dev) would leave
- * the host pushing into a destroyed connection.
- */
-function hostBridge(): HostBridge {
-  if (bridge) return bridge;
-  const listeners = new Set<SnapshotListener>();
-  const created: HostBridge = {
-    listeners,
-    latest: null,
-    connection: connectGameToHost({
-      async setState(snapshot) {
-        created.latest = snapshot;
-        listeners.forEach(listener => listener(snapshot));
-      },
-    }),
-  };
-  bridge = created;
-  return created;
-}
-
-/**
- * Guest side of the casino bridge: exposes the host's signing API once the
- * handshake resolves, and mirrors every `setState` push into React state.
+ * Guest side of the casino bridge: connects to the parent host on mount,
+ * exposes the host's signing API once the handshake resolves, and mirrors
+ * every `setState` push into React state.
  */
 export function useCasinoHost(): {
-  hostApi: HostApi | null;
-  snapshot: HostSnapshot | null;
+    hostApi: HostApi | null;
+    snapshot: HostSnapshot | null;
 } {
-  const [hostApi, setHostApi] = useState<HostApi | null>(null);
-  const [snapshot, setSnapshot] = useState<HostSnapshot | null>(null);
+    const [hostApi, setHostApi] = useState<HostApi | null>(null);
+    const [snapshot, setSnapshot] = useState<HostSnapshot | null>(null);
 
-  useEffect(() => {
-    const { connection, listeners, latest } = hostBridge();
-    let mounted = true;
-    listeners.add(setSnapshot);
-    setSnapshot(latest);
+    useEffect(() => {
+        let mounted = true;
 
-    void connection.promise
-      .then(parent => {
-        if (mounted) setHostApi(parent);
-      })
-      .catch(() => {
-        // Handshake failed — the "waiting for host" screen stays up. Opening
-        // the game outside the host iframe never resolves, which is expected.
-      });
+        const guestMethods: GuestApi = {
+            async setState(nextSnapshot) {
+                console.log("setState called", nextSnapshot);
+                if (!mounted) return;
+                setSnapshot(nextSnapshot);
+            },
+        };
 
-    return () => {
-      mounted = false;
-      listeners.delete(setSnapshot);
-    };
-  }, []);
+        const connection = connectGameToHost(guestMethods);
 
-  useEffect(() => {
-    if (!hostApi) return;
-    const observer = observeGameContentSize(hostApi);
-    return () => observer.disconnect();
-  }, [hostApi]);
+        void connection.promise
+            .then((parent) => {
+                if (mounted) setHostApi(parent);
+                console.log(parent);
+            })
+            .catch(() => {
+                // Handshake failed — the "waiting for host" screen stays up. Opening
+                // the game outside the host iframe never resolves, which is expected.
+            });
 
-  return { hostApi, snapshot };
+        return () => {
+            mounted = false;
+            connection.destroy();
+        };
+    }, []);
+
+    useEffect(() => {
+        console.log("snapshot", snapshot);
+    }, [snapshot]);
+
+    useEffect(() => {
+        if (!hostApi) return;
+        const observer = observeGameContentSize(hostApi);
+        return () => observer.disconnect();
+    }, [hostApi]);
+
+    return { hostApi, snapshot };
 }
