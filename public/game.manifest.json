@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "gameId": "Coinflip",
+  "gameId": "Last Stand",
   "defaultLocale": "en",
   "locales": {
     "en": {
-      "name": "Coinflip",
-      "description": "Flip one or more coins and settle the round from host-provided on-chain state."
+      "name": "Last Stand",
+      "description": "Pick a Survivor"
     }
   },
   "presentation": {
