@@ -120,13 +120,15 @@ contract MexicanStandoff is ICasinoGameV2 {
 
         uint8 p = _popcount(pickMask);
         require(p <= n - deathCount, "TOO_MANY_PICKS");
-        _multiplierWad(n, p, deathCount); // reverts with ODDS_EXCEED_MAX if the combo would pay > 12x
+        uint256 m = _multiplierWad(n, p, deathCount); // reverts with ODDS_EXCEED_MAX if the combo would pay > 12x
+        uint256 maxPayout = (ctx.wagerBase * m) / WAD;
 
         GameState memory state = GameState({ pickMask: pickMask, deathCount: deathCount, playerCount: n });
 
         result.newGameState = abi.encode(state);
         result.escrowDelta = 0;
-        result.reservedProfitDelta = 0;
+        // Reserve the profit a win can pay beyond the wager, so payout <= escrow + reserved profit.
+        result.reservedProfitDelta = int256(maxPayout > ctx.wagerBase ? maxPayout - ctx.wagerBase : 0);
         result.nextPhase = SessionPhase.WAITING_RANDOMNESS;
         result.requestRandomnessNow = true;
         result.payout = 0;
